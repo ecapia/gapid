@@ -28,6 +28,7 @@ go_library(
         "dump_replay.go",
         "dump_shaders.go",
         "export_replay.go",
+		"graph_visualization.go",
         "flags.go",
         "inputs.go",
         "main.go",
@@ -45,6 +46,7 @@ go_library(
         "trim.go",
         "unpack.go",
         "video.go",
+
     ],
     importpath = "github.com/google/gapid/cmd/gapit",
     visibility = ["//visibility:private"],
