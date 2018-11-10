@@ -38,6 +38,7 @@ type GraphBuilder interface {
 	OnBeginCmd(ctx context.Context, cmdCtx CmdContext)
 	OnBeginSubCmd(ctx context.Context, cmdCtx CmdContext, subCmdCtx CmdContext, recordIdx api.RecordIdx)
 	OnRecordSubCmd(ctx context.Context, cmdCtx CmdContext, recordIdx api.RecordIdx)
+	Close()
 }
 
 type GraphBuilderStats struct {
@@ -304,6 +305,8 @@ func (b *graphBuilder) OnBeginSubCmd(ctx context.Context, cmdCtx CmdContext, sub
 func (b *graphBuilder) OnRecordSubCmd(ctx context.Context, cmdCtx CmdContext, recordIdx api.RecordIdx) {
 	b.recordNodes.SetRecordNode(recordIdx, cmdCtx.nodeID)
 }
+
+func (b *graphBuilder) Close() {}
 
 func (b *graphBuilder) BuildReverseDependencies() {
 	b.graph.buildDependenciesTo()
