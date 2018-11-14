@@ -12,17 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-syntax = "proto3";
-
-package dependencygraph;
-option go_package = "github.com/google/gapid/gapis/resolve/dependencygraph2";
-
-import "gapis/service/path/path.proto";
-
-message DependencyGraph2Resolvable {
-  path.Capture capture = 1;
-  bool includeInitialCommands = 2;
-  bool mergeSubCmdNodes = 3;
-  bool reverseDependencies = 4;
-  bool saveNodeAccesses = 5;
-}
+// Package memory_pb describes the serialization format for the memory package.
+package dependencygraph2_pb
