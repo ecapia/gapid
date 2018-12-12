@@ -18,7 +18,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "go_default_library",
     srcs = [
-		"graph_visualization.go"
+		"graph_visualization.go" ,
+		"graph_structure.go"
     ],
     importpath = "github.com/google/gapid/gapis/resolve/dependencygraph2/graph_visualization",
     visibility = ["//visibility:public"],
@@ -41,7 +42,7 @@ go_library(
 
 go_test(
     name = "go_default_test",
-    srcs = ["graph_visualization_test.go"],
+    srcs = ["graph_structure_test.go"],
     embed = [":go_default_library"],
     deps = [
         "//core/assert:go_default_library",

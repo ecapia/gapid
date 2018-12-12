@@ -35,6 +35,8 @@ func init() {
 }
 
 func (verb *graph_visualizationVerb) Run(ctx context.Context, flags flag.FlagSet) error {
+
+	log.I(ctx , "1. I am in the Run function!!")
 	if flags.NArg() != 1 {
 		app.Usage(ctx, "Exactly one gfx capture file expected, got %d", flags.NArg())
 		return nil
