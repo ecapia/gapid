@@ -9,6 +9,10 @@ import (
 	"sort"
 )
 
+const (
+	QUEUE_PRESENT = "vkQueuePresentKHR"
+)
+
 type Node struct {
 	incomingIdNodesToIdEdge  map[int]int
 	outcomingIdNodesToIdEdge map[int]int
@@ -92,6 +96,7 @@ func (g *Graph) addEdge(newEdge *Edge) bool {
 	if _, ok := source.outcomingIdNodesToIdEdge[sink.id]; ok {
 		return false
 	}
+
 	id := g.maxIdEdge
 	g.idEdgeToEdge[id] = newEdge
 	g.numberEdges++
@@ -134,6 +139,7 @@ func (g *Graph) removeEdgeById(id int) bool {
 }
 
 func (g *Graph) removeNodeById(id int) bool {
+
 	node, ok := g.idNodeToNode[id]
 	if ok == false {
 		return false
@@ -152,6 +158,7 @@ func (g *Graph) removeNodeById(id int) bool {
 }
 
 func (g *Graph) removeNodesWithZeroDegree() {
+
 	for id, node := range g.idNodeToNode {
 		if (len(node.incomingIdNodesToIdEdge) + len(node.outcomingIdNodesToIdEdge)) == 0 {
 			g.removeNodeById(id)
@@ -160,6 +167,7 @@ func (g *Graph) removeNodesWithZeroDegree() {
 }
 
 func (g *Graph) joinEdgesThroughtNode(idNode int) bool {
+
 	node, ok := g.idNodeToNode[idNode]
 	if ok == false {
 		return false
@@ -182,32 +190,32 @@ func (g *Graph) removeNodeByIdKeepingEdges(id int) bool {
 	return true
 }
 
-func printMap(m map[int]int) {
-	for k, v := range m {
-		fmt.Println("idNeighbor = ", k, " idEdge = ", v)
+func (g *Graph) dfs(node *Node, visited *[]bool, numFrame *int) {
+	(*visited)[node.id] = true
+	node.label = QUEUE_PRESENT + fmt.Sprintf("%d/", *numFrame) + node.label
+	for idNeighbor := range node.outcomingIdNodesToIdEdge {
+		neighbor := g.idNodeToNode[idNeighbor]
+		if (*visited)[neighbor.id] == false {
+			g.dfs(neighbor, visited, numFrame)
+		}
 	}
 }
 
-func (g *Graph) printEdges() {
-	for _, edge := range g.idEdgeToEdge {
-		fmt.Println(" ( ", edge.source.id, ",", edge.sink.id, ")", "idEdge = ", edge.id)
-	}
-}
-
-func (g *Graph) printNodes() {
-	for id, node := range g.idNodeToNode {
-		fmt.Println("node = ", id)
-		fmt.Println("in = ")
-		printMap(node.incomingIdNodesToIdEdge)
-		fmt.Println("out = ")
-		printMap(node.outcomingIdNodesToIdEdge)
+func (g *Graph) joinNodesByFrame() {
+	visited := make([]bool, g.maxIdNode)
+	numFrame := 0
+	for i := 0; i < g.maxIdNode; i++ {
+		if node, ok := g.idNodeToNode[i]; ok && node.name == QUEUE_PRESENT {
+			g.dfs(node, &visited, &numFrame)
+			numFrame++
+		}
 	}
 }
 
 func (g *Graph) getEdgesAsString() string {
 	output := ""
-	for _, edge := range g.idEdgeToEdge {
-		lines := fmt.Sprintf("%d", edge.source.id) + " -> " + fmt.Sprintf("%d", edge.sink.id) + ";\n"
+	for _, e := range g.idEdgeToEdge {
+		lines := fmt.Sprintf("%d", e.source.id) + " -> " + fmt.Sprintf("%d", e.sink.id) + ";\n"
 		output += lines
 	}
 	return output
@@ -215,8 +223,8 @@ func (g *Graph) getEdgesAsString() string {
 
 func (g *Graph) getNodesAsString() string {
 	output := ""
-	for _, node := range g.idNodeToNode {
-		lines := fmt.Sprintf("%d", node.id) + "[label=" + "\"" + node.label + "\"" + "]" + ";\n"
+	for _, n := range g.idNodeToNode {
+		lines := fmt.Sprintf("%d", n.id) + "[label=" + "\"" + n.label + "\"" + "]" + ";\n"
 		output += lines
 	}
 	return output
@@ -237,11 +245,13 @@ func (g *Graph) getPbtxtFile() string {
 		orderedIdNodes = append(orderedIdNodes, id)
 	}
 	sort.Ints(orderedIdNodes)
+
 	for _, idNode := range orderedIdNodes {
 		node := g.idNodeToNode[idNode]
 		if node.isReal == false {
 			continue
 		}
+
 		lines := "node {\n"
 		lines += "\tname: " + "\"" + node.label + "\"" + "\n"
 		lines += "\top: " + "\"" + node.label + "\"" + "\n"
@@ -253,11 +263,12 @@ func (g *Graph) getPbtxtFile() string {
 		sort.Ints(orderedIdEdges)
 
 		for _, idNeighbor := range orderedIdEdges {
-			nodeNeighbor := g.idNodeToNode[idNeighbor]
-			if nodeNeighbor.isReal == false {
+			neighbor := g.idNodeToNode[idNeighbor]
+			if neighbor.isReal == false {
 				continue
 			}
-			lines += "\tinput: " + "\"" + nodeNeighbor.label + "\"" + "\n"
+
+			lines += "\tinput: " + "\"" + neighbor.label + "\"" + "\n"
 		}
 
 		for i, val := range node.attributes {
@@ -275,8 +286,8 @@ func (g *Graph) getPbtxtFile() string {
 	return output
 }
 
-func getProtoFile(ctx context.Context, dependencyGraph dependencygraph2.DependencyGraph) string {
-	msg, err := protoconv.ToProto(ctx, dependencyGraph)
+func getProtoFile(ctx context.Context, g dependencygraph2.DependencyGraph) string {
+	msg, err := protoconv.ToProto(ctx, g)
 	if err != nil {
 		panic(msg)
 	}
