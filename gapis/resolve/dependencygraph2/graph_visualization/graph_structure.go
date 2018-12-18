@@ -2,32 +2,77 @@ package graph_visualization
 
 import (
 	"bytes"
-	"context"
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	"github.com/google/gapid/core/data/protoconv"
-	"github.com/google/gapid/gapis/resolve/dependencygraph2"
-	"github.com/google/gapid/gapis/resolve/dependencygraph2/graph_visualization/protobuf"
 	"sort"
 )
 
-const (
-	QUEUE_PRESENT        = "vkQueuePresentKHR"
-	SUPER_COMMAND_BUFFER = "SuperBuffer"
-	SUPER_QUEUE_SUBMIT   = "SuperQueue"
-	UNUSED_COMMANDS      = "UnusedCommands"
-	MAX_NODES_BY_LEVEL   = 5
-)
+type Label struct {
+	name []string
+	id   []int
+}
+
+func (label *Label) pushBack(name string, id int) {
+	label.name = append(label.name, name)
+	label.id = append(label.id, id)
+}
+func (label *Label) pushFront(name string, id int) {
+	temporal := &Label{name: []string{name}, id: []int{id}}
+	temporal.pushBackLabel(label)
+	label.name = temporal.name
+	label.id = temporal.id
+}
+
+func (label *Label) pushBackLabel(labelToPush *Label) {
+	label.name = append(label.name, labelToPush.name...)
+	label.id = append(label.id, labelToPush.id...)
+}
+
+func (label *Label) update(index int, name string, id int) bool {
+	if index >= len(label.id) {
+		return false
+	}
+	label.name[index] = name
+	label.id[index] = id
+	return true
+}
+
+func getMaxCommonPrefix(label1 *Label, label2 *Label) int {
+	size := len(label1.id)
+	if len(label2.id) < size {
+		size = len(label2.id)
+	}
+	for i := 0; i < size; i++ {
+		if label1.name[i] != label2.name[i] || label1.id[i] != label2.id[i] {
+			return i
+		}
+	}
+	return size
+}
+
+func (label *Label) getLabelAsString() string {
+	var output bytes.Buffer
+	size := len(label.name)
+	for i := range label.name {
+		if i+1 < size {
+			output.WriteString(label.name[i] + fmt.Sprintf("_%d/", label.id[i]))
+		} else {
+			output.WriteString(label.name[i] + fmt.Sprintf("_%d", label.id[i]))
+		}
+	}
+	return output.String()
+}
 
 type Node struct {
-	incomingIdNodesToIdEdge  map[int]int
-	outcomingIdNodesToIdEdge map[int]int
-	id                       int
-	label                    string
-	name                     string
-	nameFrame                string
-	attributes               []string
-	isReal                   bool
+	incomingIdNodesToIdEdge       map[int]int
+	outcomingIdNodesToIdEdge      map[int]int
+	incomingNodes, outcomingNodes []*Node
+	id                            int
+	name                          string
+	nameFrame                     string
+	attributes                    []string
+	isReal                        bool
+	label                         *Label
+	color                         string
 }
 
 type Edge struct {
@@ -39,6 +84,8 @@ type Edge struct {
 type Graph struct {
 	idNodeToNode map[int]*Node
 	idEdgeToEdge map[int]*Edge
+	nodes        []*Node
+	edges        []*Edge
 	maxIdNode    int
 	maxIdEdge    int
 	numberNodes  int
@@ -56,22 +103,22 @@ func createGraph(numberNodes int) *Graph {
 	return newGraph
 }
 
-func (g *Graph) addNodeByDefault(label string) int {
+func (g *Graph) addNodeByDefault(name string) int {
 	id := g.maxIdNode
-	newNode := &Node{incomingIdNodesToIdEdge: map[int]int{}, outcomingIdNodesToIdEdge: map[int]int{}, id: id, label: label}
+	newNode := &Node{incomingIdNodesToIdEdge: map[int]int{}, outcomingIdNodesToIdEdge: map[int]int{}, id: id, name: name}
 	g.idNodeToNode[id] = newNode
 	g.numberNodes++
 	g.maxIdNode++
 	return id
 }
 
-func (g *Graph) addNodeById(id int, label string) bool {
+func (g *Graph) addNodeById(id int, name string) bool {
 	_, ok := g.idNodeToNode[id]
 	if ok == true {
 		return false
 	}
 
-	newNode := &Node{incomingIdNodesToIdEdge: map[int]int{}, outcomingIdNodesToIdEdge: map[int]int{}, id: id, label: label}
+	newNode := &Node{incomingIdNodesToIdEdge: map[int]int{}, outcomingIdNodesToIdEdge: map[int]int{}, id: id, name: name}
 	g.idNodeToNode[id] = newNode
 	g.numberNodes++
 	g.maxIdNode++
@@ -81,7 +128,7 @@ func (g *Graph) addNodeById(id int, label string) bool {
 	return true
 }
 
-func (g *Graph) addNodeByIdAndNameAndAttrAndIsReal(id int, label string, name string, attributes []string, isReal bool) bool {
+func (g *Graph) addNodeByIdAndNameAndAttrAndIsReal(id int, label *Label, name string, attributes []string, isReal bool) bool {
 	_, ok := g.idNodeToNode[id]
 	if ok == true {
 		return false
@@ -108,7 +155,6 @@ func (g *Graph) addEdge(newEdge *Edge) bool {
 	g.idEdgeToEdge[id] = newEdge
 	g.numberEdges++
 	g.maxIdEdge++
-
 	source.outcomingIdNodesToIdEdge[sink.id] = id
 	sink.incomingIdNodesToIdEdge[source.id] = id
 	return true
@@ -197,201 +243,30 @@ func (g *Graph) removeNodeByIdKeepingEdges(id int) bool {
 	}
 	return true
 }
-func getKeysSortedFromMap(input map[int]int) []int {
-	sortedKeys := []int{}
+
+func (g *Graph) getNodesFromKeysInMap(input map[int]int) []*Node {
+	nodes := []*Node{}
 	for key := range input {
-		sortedKeys = append(sortedKeys, key)
+		nodes = append(nodes, g.idNodeToNode[key])
 	}
-	sort.Ints(sortedKeys)
-	return sortedKeys
+	return nodes
 }
 
-func (g *Graph) dfs(node *Node, visited *[]bool, numberFrame *int, queueSubmitToPos, commandBufferToPos *map[string]int, visitedIdNodes *[]*Node) {
-	*visitedIdNodes = append(*visitedIdNodes, node)
-	nameTopLevel := splitLabelByChar(&node.label, '/')[0]
-	if node.label[0] == 'c' { //Needs to improve this part
-		size := len(*commandBufferToPos)
-		if _, ok := (*commandBufferToPos)[nameTopLevel]; ok == false {
-			(*commandBufferToPos)[nameTopLevel] = size
-		}
-	} else {
-		size := len(*queueSubmitToPos)
-		if _, ok := (*queueSubmitToPos)[nameTopLevel]; ok == false {
-			(*queueSubmitToPos)[nameTopLevel] = size
-		}
-	}
-
-	(*visited)[node.id] = true
-	node.nameFrame = QUEUE_PRESENT + fmt.Sprintf("%d", *numberFrame)
-	idNeighbors := getKeysSortedFromMap(node.outcomingIdNodesToIdEdge)
-	for _, idNeighbor := range idNeighbors {
-		neighbor := g.idNodeToNode[idNeighbor]
-		if (*visited)[neighbor.id] == false {
-			g.dfs(neighbor, visited, numberFrame, queueSubmitToPos, commandBufferToPos, visitedIdNodes)
-		}
-	}
-}
-
-func (g *Graph) joinNodesByFrame() {
-	visited := make([]bool, g.maxIdNode)
-	numberFrame := 1
-	for i := 0; i < g.maxIdNode; i++ {
-		if node, ok := g.idNodeToNode[i]; ok && node.name == QUEUE_PRESENT && visited[node.id] == false {
-			commandBufferToPos := map[string]int{}
-			queueSubmitToPos := map[string]int{}
-			visitedIdNodes := []*Node{}
-			g.dfs(node, &visited, &numberFrame, &queueSubmitToPos, &commandBufferToPos, &visitedIdNodes)
-
-			sizeSuperCommandBuffer := (len(commandBufferToPos) + MAX_NODES_BY_LEVEL - 1) / MAX_NODES_BY_LEVEL
-			sizeSuperQueueSubmit := (len(queueSubmitToPos) + MAX_NODES_BY_LEVEL - 1) / MAX_NODES_BY_LEVEL
-			for _, node := range visitedIdNodes {
-				nameTopLevel := splitLabelByChar(&node.label, '/')[0]
-				pos := 0
-				if node.label[0] == 'c' { // needs to improve this part
-					pos = commandBufferToPos[nameTopLevel]
-					node.label = SUPER_COMMAND_BUFFER + fmt.Sprintf("_%d/", pos/sizeSuperCommandBuffer) + node.label
-				} else {
-					pos = queueSubmitToPos[nameTopLevel]
-					node.label = SUPER_QUEUE_SUBMIT + fmt.Sprintf("_%d/", pos/sizeSuperQueueSubmit) + node.label
-				}
-			}
-			numberFrame++
-		}
-	}
+func (g *Graph) makeAdjacentList() {
+	g.nodes = make([]*Node, 0)
 	for _, node := range g.idNodeToNode {
-		if node.nameFrame != "" {
-			node.label = node.nameFrame + "/" + node.label
-		}
+		g.nodes = append(g.nodes, node)
 	}
-	for _, node := range g.idNodeToNode {
-		if visited[node.id] == false {
-			node.label = UNUSED_COMMANDS + "/" + node.label
-		}
+	for _, node := range g.nodes {
+		node.incomingNodes = g.getNodesFromKeysInMap(node.incomingIdNodesToIdEdge)
+		node.outcomingNodes = g.getNodesFromKeysInMap(node.outcomingIdNodesToIdEdge)
 	}
 }
 
-func (g *Graph) getEdgesAsString() string {
-	output := ""
-	for _, edge := range g.idEdgeToEdge {
-		lines := fmt.Sprintf("%d", edge.source.id) + " -> " + fmt.Sprintf("%d", edge.sink.id) + ";\n"
-		output += lines
+func (g *Graph) sortAdjacentList() {
+	sort.Sort(NodeSorter(g.nodes))
+	for _, node := range g.nodes {
+		sort.Sort(NodeSorter(node.incomingNodes))
+		sort.Sort(NodeSorter(node.outcomingNodes))
 	}
-	return output
-}
-
-func (g *Graph) getNodesAsString() string {
-	output := ""
-	for _, node := range g.idNodeToNode {
-		lines := fmt.Sprintf("%d", node.id) + "[label=" + "\"" + node.label + "\"" + "]" + ";\n"
-		output += lines
-	}
-	return output
-}
-
-func (g *Graph) getDotFile() string {
-	output := "digraph g {\n"
-	output += g.getNodesAsString()
-	output += g.getEdgesAsString()
-	output += "}\n"
-	return output
-}
-
-func (g *Graph) getNumberNodesInTopLevel() int {
-	uniquesNamesInTopLevel := map[string]int{}
-	for _, node := range g.idNodeToNode {
-		nameTopLevel := splitLabelByChar(&node.label, '/')[0]
-		uniquesNamesInTopLevel[nameTopLevel] = 1
-	}
-	return len(uniquesNamesInTopLevel)
-}
-
-func (g *Graph) getPbtxtFile() string {
-	var output bytes.Buffer
-	validIdNodes := []int{}
-	for id, node := range g.idNodeToNode {
-		if node.isReal {
-			validIdNodes = append(validIdNodes, id)
-		}
-	}
-	sort.Ints(validIdNodes)
-
-	for _, idNode := range validIdNodes {
-		node := g.idNodeToNode[idNode]
-		output.WriteString("node {\n")
-		output.WriteString("\tname: \"" + node.label + "\"\n")
-		output.WriteString("\top: \"" + node.label + "\"\n")
-
-		validIdNeighbors := []int{}
-		for idNeighbor := range node.incomingIdNodesToIdEdge {
-			if g.idNodeToNode[idNeighbor].isReal {
-				validIdNeighbors = append(validIdNeighbors, idNeighbor)
-			}
-		}
-		sort.Ints(validIdNeighbors)
-		for _, idNeighbor := range validIdNeighbors {
-			nodeNeighbor := g.idNodeToNode[idNeighbor]
-			output.WriteString("\tinput: \"" + nodeNeighbor.label + "\"\n")
-		}
-		for i, attribute := range node.attributes {
-			output.WriteString("\t\tattr {\n")
-			output.WriteString("\t\t\tkey: " + "Param" + fmt.Sprintf("%d", i+1) + "\n")
-			output.WriteString("\t\t\tvalue {\n")
-			output.WriteString("\t\t\t\t\t: " + attribute + "  \n")
-			output.WriteString("\t\t\t}\n")
-			output.WriteString("\t\t}\n")
-		}
-		output.WriteString("}\n")
-	}
-	return output.String()
-}
-
-func getProtoFileFromDependencyGraph(ctx context.Context, g dependencygraph2.DependencyGraph) string {
-	msg, err := protoconv.ToProto(ctx, g)
-	if err != nil {
-		panic(msg)
-	}
-	output := proto.MarshalTextString(msg)
-	return output
-}
-func (g *Graph) getProtoFile() string {
-	validIdNodes := []int{}
-	for id, node := range g.idNodeToNode {
-		if node.isReal {
-			validIdNodes = append(validIdNodes, id)
-		}
-	}
-	sort.Ints(validIdNodes)
-	numberValidNodes := len(validIdNodes)
-
-	protoGraph := &protobuf.Graph{}
-	protoGraph.Nodes = make([]*protobuf.Node, numberValidNodes)
-
-	for i, idNode := range validIdNodes {
-		tmp := g.getNodeProto(idNode)
-		protoGraph.Nodes[i] = tmp
-	}
-
-	output := proto.MarshalTextString(protoGraph)
-	return output
-}
-
-func (g *Graph) getNodeProto(idNode int) *protobuf.Node {
-	protoNode := &protobuf.Node{}
-	node := g.idNodeToNode[idNode]
-	protoNode.Name = node.label
-	protoNode.Op = node.label
-
-	validIdNeighbors := []int{}
-	for idNeighbor := range node.incomingIdNodesToIdEdge {
-		if g.idNodeToNode[idNeighbor].isReal {
-			validIdNeighbors = append(validIdNeighbors, idNeighbor)
-		}
-	}
-	sort.Ints(validIdNeighbors)
-	numberValidNeighbors := len(validIdNeighbors)
-	protoNode.Input = make([]string, numberValidNeighbors)
-	for i, idNeighbor := range validIdNeighbors {
-		protoNode.Input[i] = g.idNodeToNode[idNeighbor].label
-	}
-	return protoNode
 }

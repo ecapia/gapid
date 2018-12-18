@@ -19,7 +19,9 @@ go_library(
     name = "go_default_library",
     srcs = [
 		"graph_visualization.go" ,
-		"graph_structure.go"
+		"graph_structure.go",
+		"graph_algorithms.go",
+		"graph_output.go",
     ],
     importpath = "github.com/google/gapid/gapis/resolve/dependencygraph2/graph_visualization",
     visibility = ["//visibility:public"],
@@ -41,6 +43,8 @@ go_library(
 		"//core/data/protoconv:go_default_library",
 		"@com_github_golang_protobuf//proto:go_default_library",
 		"//gapis/resolve/dependencygraph2/graph_visualization/protobuf:go_default_library",
+        "//gapis/api/vulkan:go_default_library",
+
 		
     ],
 )

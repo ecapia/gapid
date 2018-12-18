@@ -126,30 +126,37 @@ func TestGraph1(t *testing.T) {
 }
 
 func TestGraph2(t *testing.T){
+	labelA := &Label{name : []string{"A"} , id : []int{1}}
+	labelB := &Label{name : []string{"B"} , id : []int{2}}
+	labelC := &Label{name : []string{"C"} , id : []int{3}}
+	labelD := &Label{name : []string{"D"} , id : []int{4}}
+	labelE := &Label{name : []string{"E"} , id : []int{5}}
+	labelF := &Label{name : []string{"F"} , id : []int{6}}
+	labelG := &Label{name : []string{"G"} , id : []int{7}}
 
 	wantedGraph := createGraph(0)
 	testedGraph := createGraph(0)
 	attributes := []string{}
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(0,"A","vkCommandBuffer0",attributes,true)
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(1,"A","vkCommandBuffer1",attributes,true)
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(2,"A","vkCommandBuffer2",attributes,true)
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(3,"A","vkCommandBuffer3",attributes,true)
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(4,"A","vkCommandBuffer4",attributes,true)
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(5,"A","vkCommandBuffer5",attributes,true)
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(6,"A","vkCommandBuffer6",attributes,true)
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(7,"A","vkCommandBuffer7",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(0,labelA,"vkCommandBuffer0",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(1,labelA,"vkCommandBuffer1",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(2,labelA,"vkCommandBuffer2",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(3,labelA,"vkCommandBuffer3",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(4,labelA,"vkCommandBuffer4",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(5,labelA,"vkCommandBuffer5",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(6,labelA,"vkCommandBuffer6",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(7,labelA,"vkCommandBuffer7",attributes,true)
 	testedGraph.removeNodesWithZeroDegree()
 
 	if areEqualGraphs(t , wantedGraph , testedGraph) == false {
 		t.Errorf("The graphs are different\n")
 	}
 
-	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(0,"A","vkCommandBuffer0",attributes,true)
-	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(2,"B","vkCommandBuffer2",attributes,true)
-	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(6,"C","vkCommandBuffer6",attributes,true)
-	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(3,"D","vkCommandBuffer3",attributes,true)
-	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(4,"E","vkCommandBuffer4",attributes,true)
-	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(5,"F","vkCommandBuffer5",attributes,true)
+	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(0,labelA,"vkCommandBuffer0",attributes,true)
+	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(2,labelB,"vkCommandBuffer2",attributes,true)
+	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(6,labelC,"vkCommandBuffer6",attributes,true)
+	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(3,labelD,"vkCommandBuffer3",attributes,true)
+	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(4,labelE,"vkCommandBuffer4",attributes,true)
+	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(5,labelF,"vkCommandBuffer5",attributes,true)
 	wantedGraph.addEdgeByIdNodes(0 , 3)
 	wantedGraph.addEdgeByIdNodes(0 , 4)
 	wantedGraph.addEdgeByIdNodes(0 , 5)
@@ -160,13 +167,13 @@ func TestGraph2(t *testing.T){
 	wantedGraph.addEdgeByIdNodes(6 , 4)
 	wantedGraph.addEdgeByIdNodes(6 , 5)
 
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(0,"A","vkCommandBuffer0",attributes,true)
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(2,"B","vkCommandBuffer2",attributes,true)
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(6,"C","vkCommandBuffer6",attributes,true)
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(3,"D","vkCommandBuffer3",attributes,true)
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(4,"E","vkCommandBuffer4",attributes,true)
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(5,"F","vkCommandBuffer5",attributes,true)
-	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(1,"G","vkCommandBuffer1",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(0,labelA,"vkCommandBuffer0",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(2,labelB,"vkCommandBuffer2",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(6,labelC,"vkCommandBuffer6",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(3,labelD,"vkCommandBuffer3",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(4,labelE,"vkCommandBuffer4",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(5,labelF,"vkCommandBuffer5",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(1,labelG,"vkCommandBuffer1",attributes,true)
 	testedGraph.addEdgeByIdNodes(0,1)
 	testedGraph.addEdgeByIdNodes(2,1)
 	testedGraph.addEdgeByIdNodes(6,1)

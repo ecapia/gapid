@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/gapid/gapis/api"
+	"github.com/google/gapid/gapis/api/vulkan"
 	"github.com/google/gapid/gapis/resolve/dependencygraph2"
 	"github.com/google/gapid/gapis/service/path"
 )
@@ -24,8 +25,8 @@ const (
 	COMMAND_DEBUG_MARKER       = "vkCmdDebugMarker"
 	COMMAND_BEGIN_RENDER_PASS  = "vkCmdBeginRenderPass"
 	COMMAND_BUFFER             = "commandBuffer"
-	EMPTY                      = "Empty"
-	MAXIMUM_LEVEL_IN_HIERARCHY = 5
+	EMPTY_NAME                 = "Empty"
+	MAXIMUM_LEVEL_IN_HIERARCHY = 10
 )
 
 type HierarchyNames struct {
@@ -56,112 +57,75 @@ func getNameForCommandAndSubCommandHierarchy() (*HierarchyNames, *HierarchyNames
 	subCommandHierarchyNames.add("vkCmdNextSubpass", "vkCmdNextSubpass", "vkSubpass")
 	return commandHierarchyNames, subCommandHierarchyNames
 }
-func splitLabelByChar(label *string, splitChar byte) []string {
-	output := []string{}
-	prevPos := 0
-	for i := 0; i <= len(*label); i++ {
-		if i == len(*label) || (*label)[i] == splitChar {
-			output = append(output, (*label)[prevPos:i])
-			prevPos = i + 1
-		}
-	}
-	return output
-}
-
-func mergeSplitLabel(splitLabel []string) string {
-	output := ""
-	for _, val := range splitLabel {
-		output += val
-		output += "/"
-	}
-	return output
-}
-
-func getMaxCommonPrefix(splitLabel1 *[]string, splitLabel2 *[]string) int {
-	size := len(*splitLabel1)
-	if len(*splitLabel2) < size {
-		size = len(*splitLabel2)
-	}
-	for i := 0; i < size; i++ {
-		if (*splitLabel1)[i] != (*splitLabel2)[i] {
-			return i
-		}
-	}
-	return size
-}
-
-func getMaxCommonPrefixBetweenLabels(label1, label2 string) int {
-	splitLabel1 := splitLabelByChar(&label1, '/')
-	splitLabel2 := splitLabelByChar(&label2, '/')
-	return getMaxCommonPrefix(&splitLabel1, &splitLabel2)
-}
 
 type Hierarchy struct {
-	idLevels     [MAXIMUM_LEVEL_IN_HIERARCHY]int
-	currentLevel int
+	idLevels              [MAXIMUM_LEVEL_IN_HIERARCHY]int
+	currentLevel          int
+	numberOfCommandBuffer int
 }
 
-func (h *Hierarchy) setZeroFrom(from int) {
+func (h *Hierarchy) setZerosFrom(from int) {
 	for i := from; i < MAXIMUM_LEVEL_IN_HIERARCHY; i++ {
 		if i >= 0 {
 			h.idLevels[i] = 0
 		}
 	}
 }
-func addDebugMarkersToGraph(graph *Graph, idNodes []int) {
-	posBeginDebugMarker := 0
-	labelBeginDebugMarker := []string{}
-	for pos, idNode := range idNodes {
-		node := graph.idNodeToNode[idNode]
+func addDebugMarkersToNodes(nodes []*Node) {
+	posBeginDebugMarker := -1
+	labelBeginDebugMarker := &Label{}
+	for pos, node := range nodes {
 		if node.name == COMMAND_BEGIN_DEBUG_MARKER {
 			posBeginDebugMarker = pos
-			labelBeginDebugMarker = splitLabelByChar(&node.label, '/')
+			labelBeginDebugMarker = node.label
 		} else {
-			if node.name == COMMAND_END_DEBUG_MARKER {
-				labelEndDebugMarker := splitLabelByChar(&node.label, '/')
-				if getMaxCommonPrefix(&labelBeginDebugMarker, &labelEndDebugMarker) == len(labelEndDebugMarker)-1 {
+			if posBeginDebugMarker >= 0 && node.name == COMMAND_END_DEBUG_MARKER {
+				labelEndDebugMarker := node.label
+				if len(labelBeginDebugMarker.id) == len(labelEndDebugMarker.id) &&
+					getMaxCommonPrefix(labelBeginDebugMarker, labelEndDebugMarker) == len(labelEndDebugMarker.id)-1 {
 					for i := posBeginDebugMarker; i <= pos; i++ {
-						node = graph.idNodeToNode[idNodes[i]]
-						splitLabel := splitLabelByChar(&node.label, '/')
-						lastLabel := splitLabel[len(splitLabel)-1]
-						splitLabel[len(splitLabel)-1] = COMMAND_DEBUG_MARKER
-						node.label = mergeSplitLabel(splitLabel) + lastLabel
+						nodeInDebugMarker := nodes[i]
+						size := len(nodeInDebugMarker.label.id)
+						nodeInDebugMarker.label.pushBack(nodeInDebugMarker.label.name[size-1], nodeInDebugMarker.label.id[size-1])
+						nodeInDebugMarker.label.update(size-1, COMMAND_DEBUG_MARKER, 0)
 					}
 				}
+				posBeginDebugMarker = -1
 			}
 		}
 	}
 }
-
-func getCommandBuffer(command api.Cmd) string {
+func getCommandBuffer(command api.Cmd) (string, vulkan.VkCommandBuffer) {
 	parameters := command.CmdParams()
 	for _, parameter := range parameters {
 		if parameter.Name == COMMAND_BUFFER {
-			commandBuffer := parameter.Name + fmt.Sprintf("_%d", parameter.Get())
-			return commandBuffer
+			id := parameter.Get().(vulkan.VkCommandBuffer)
+			return parameter.Name, id
 		}
 	}
-	return ""
+	return "", 0
 }
 
-func getCommandLabel(command api.Cmd, idCommandNode uint64, commandHierarchyNames *HierarchyNames, labelToHierarchy *map[string]*Hierarchy) string {
+func getCommandLabel(command api.Cmd, idCommandNode uint64, commandHierarchyNames *HierarchyNames, commandBufferIdToHierarchy *map[vulkan.VkCommandBuffer]*Hierarchy) *Label {
+	label := &Label{}
 	commandName := command.CmdName()
-	var label bytes.Buffer
-	if commandBuffer := getCommandBuffer(command); commandBuffer != "" {
-		if _, ok := (*labelToHierarchy)[commandBuffer]; ok == false {
-			(*labelToHierarchy)[commandBuffer] = &Hierarchy{}
+	if command, idCommandBuffer := getCommandBuffer(command); command != "" {
+		if _, ok := (*commandBufferIdToHierarchy)[idCommandBuffer]; ok == false {
+			size := len(*commandBufferIdToHierarchy)
+			(*commandBufferIdToHierarchy)[idCommandBuffer] = &Hierarchy{numberOfCommandBuffer: size + 1}
 		}
-		currentHierarchy := (*labelToHierarchy)[commandBuffer]
-		label.WriteString(commandBuffer + "/")
-		label.WriteString(getLabelFromHierarchy(commandName, commandHierarchyNames, currentHierarchy))
-		label.WriteString(fmt.Sprintf("%s_%d", commandName, idCommandNode))
+		currentHierarchy := (*commandBufferIdToHierarchy)[idCommandBuffer]
+		label.pushBack(command, currentHierarchy.numberOfCommandBuffer)
+		label.pushBackLabel(getLabelFromHierarchy(commandName, commandHierarchyNames, currentHierarchy))
+		label.pushBack(commandName, int(idCommandNode))
 	} else {
-		label.WriteString(fmt.Sprintf("%s_%d", commandName, idCommandNode))
+		label.pushBack(commandName, int(idCommandNode))
 	}
-	return label.String()
+	return label
 }
 
-func getLabelFromHierarchy(name string, hierarchyNames *HierarchyNames, currentHierarchy *Hierarchy) string {
+func getLabelFromHierarchy(name string, hierarchyNames *HierarchyNames, currentHierarchy *Hierarchy) *Label {
+	label := &Label{}
 	if currentLevel, ok := hierarchyNames.beginNames[name]; ok && currentLevel <= currentHierarchy.currentLevel {
 		currentHierarchy.idLevels[currentLevel]++
 		currentHierarchy.currentLevel = currentLevel + 1
@@ -170,9 +134,8 @@ func getLabelFromHierarchy(name string, hierarchyNames *HierarchyNames, currentH
 			currentHierarchy.currentLevel = currentLevel + 1
 		}
 	}
-	var label bytes.Buffer
 	for i := 0; i < currentHierarchy.currentLevel; i++ {
-		label.WriteString(fmt.Sprintf("%d_%s/", currentHierarchy.idLevels[i], hierarchyNames.listNames[i]))
+		label.pushBack(hierarchyNames.listNames[i], currentHierarchy.idLevels[i])
 	}
 	if _, ok := hierarchyNames.beginNames[name]; ok {
 		if name == COMMAND_BEGIN_RENDER_PASS {
@@ -180,98 +143,92 @@ func getLabelFromHierarchy(name string, hierarchyNames *HierarchyNames, currentH
 			currentHierarchy.currentLevel++
 		}
 	}
-	currentHierarchy.setZeroFrom(currentHierarchy.currentLevel)
-	return label.String()
+	currentHierarchy.setZerosFrom(currentHierarchy.currentLevel)
+	return label
 }
 
-func makeChainByRenderScope(graph *Graph, prevNode *Node, currNode *Node) {
-	if _, ok1 := commandsInsideRenderScope[prevNode.name]; ok1 {
-		if _, ok2 := commandsInsideRenderScope[currNode.name]; ok2 {
-			if getMaxCommonPrefixBetweenLabels(prevNode.label, currNode.label) >= 2 {
-				graph.addEdgeByNodes(currNode, prevNode)
-			}
-		}
-	}
-}
+func getSubCommandLabel(commandNode dependencygraph2.CmdNode, commandName string,
+	subCommandNameToLabel *map[string]*Label) (*Label, string) {
 
-func getSubCommandLabel(commandNode dependencygraph2.CmdNode, commandName string, subCommandToLabel *map[string]string) (string, string) {
-	subCommandName := commandName
-	label := commandName
-	for i := 1; i < len(commandNode.Index); i++ {
-		subCommandName += fmt.Sprintf("/%d", commandNode.Index[i])
-		if i+1 < len(commandNode.Index) {
-			if name, ok := (*subCommandToLabel)[subCommandName]; ok {
-				label += "/" + name
+	currentSubCommandName := commandName + fmt.Sprintf("_%d", commandNode.Index[0])
+	subCommandName := currentSubCommandName
+	label := &Label{}
+	label.pushBack(commandName, int(commandNode.Index[0]))
+	for curr := 1; curr < len(commandNode.Index); curr++ {
+		currentSubCommandName += fmt.Sprintf("/_%d", commandNode.Index[curr])
+		if curr+1 < len(commandNode.Index) {
+			if labelFromHierarchy, ok := (*subCommandNameToLabel)[currentSubCommandName]; ok {
+				label.pushBackLabel(labelFromHierarchy)
 			} else {
-				label += fmt.Sprintf("/%d", commandNode.Index[i])
+				label.pushBack("", int(commandNode.Index[curr]))
 			}
+			subCommandName += fmt.Sprintf("/_%d", commandNode.Index[curr])
 		}
 	}
 	return label, subCommandName
 }
 
 func createGraphFromDependencyGraph(dependencyGraph dependencygraph2.DependencyGraph) (*Graph, error) {
+
 	graph := createGraph(0)
 	numberNodes := dependencyGraph.NumNodes()
 	commandHierarchyNames, subCommandHierarchyNames := getNameForCommandAndSubCommandHierarchy()
-	subCommandToLabel := map[string]string{}
-	labelToHierarchy := map[string]*Hierarchy{}
-	prevNode := &Node{}
-	validIdNodes := []int{}
-
+	subCommandNameToLabel := map[string]*Label{}
+	subCommandNameToHierarchy := map[string]*Hierarchy{}
+	commandBufferIdToHierarchy := map[vulkan.VkCommandBuffer]*Hierarchy{}
+	validNodes := []*Node{}
 	for i := 0; i < numberNodes; i++ {
 		dependencyNode := dependencyGraph.GetNode(dependencygraph2.NodeID(i))
 		if commandNode, ok := dependencyNode.(dependencygraph2.CmdNode); ok {
 			idCommandNode := commandNode.Index[0]
 			command := dependencyGraph.GetCommand(api.CmdID(idCommandNode))
-			var name, label bytes.Buffer
-
+			commandName := command.CmdName()
+			var name bytes.Buffer
+			label := &Label{}
 			isReal := api.CmdID(idCommandNode).IsReal()
+
 			if len(commandNode.Index) == 1 {
-				label.WriteString(getCommandLabel(command, idCommandNode, commandHierarchyNames, &labelToHierarchy))
-				name.WriteString(command.CmdName())
+				label = getCommandLabel(command, idCommandNode, commandHierarchyNames, &commandBufferIdToHierarchy)
+				name.WriteString(commandName)
 			} else {
 				if len(commandNode.Index) > 1 {
-					commandName := fmt.Sprintf("%s_%d", command.CmdName(), idCommandNode)
-					subCommandLabel, tmpLabel := getSubCommandLabel(commandNode, commandName, &subCommandToLabel)
-					if _, ok := labelToHierarchy[subCommandLabel]; ok == false {
-						labelToHierarchy[subCommandLabel] = &Hierarchy{}
+					subCommandName := ""
+					label, subCommandName = getSubCommandLabel(commandNode, commandName, &subCommandNameToLabel)
+					if _, ok := subCommandNameToHierarchy[subCommandName]; ok == false {
+						subCommandNameToHierarchy[subCommandName] = &Hierarchy{}
 					}
 
-					currentHierarchy := labelToHierarchy[subCommandLabel]
+					currentHierarchy := subCommandNameToHierarchy[subCommandName]
+					subCommandName += fmt.Sprintf("/_%d", commandNode.Index[len(commandNode.Index)-1])
+
+					nameLastLevel := EMPTY_NAME
 					dependencyNodeAccesses := dependencyGraph.GetNodeAccesses(dependencygraph2.NodeID(i))
-					subCommandName := EMPTY
 					if len(dependencyNodeAccesses.InitCmdNodes) > 0 {
-						subCommandName = graph.idNodeToNode[int(dependencyNodeAccesses.InitCmdNodes[0])].name
+						nameLastLevel = graph.idNodeToNode[int(dependencyNodeAccesses.InitCmdNodes[0])].name
 					}
-					hierarchyLabel := getLabelFromHierarchy(subCommandName, subCommandHierarchyNames, currentHierarchy)
-					hierarchyLabel += fmt.Sprintf("%d_", commandNode.Index[len(commandNode.Index)-1]) + subCommandName
-					subCommandToLabel[tmpLabel] = hierarchyLabel
 
-					label.WriteString(subCommandLabel + "/")
-					label.WriteString(hierarchyLabel)
-					name.WriteString(subCommandName)
+					labelFromHierarchy := getLabelFromHierarchy(nameLastLevel, subCommandHierarchyNames, currentHierarchy)
+					labelFromHierarchy.pushBack(nameLastLevel, int(commandNode.Index[len(commandNode.Index)-1]))
+
+					subCommandNameToLabel[subCommandName] = labelFromHierarchy
+					label.pushBackLabel(labelFromHierarchy)
+					name.WriteString(nameLastLevel)
 				}
 			}
 			attributes := []string{}
 			for _, parameter := range command.CmdParams() {
 				attributes = append(attributes, parameter.Name+fmt.Sprintf("%d", parameter.Get()))
 			}
-			graph.addNodeByIdAndNameAndAttrAndIsReal(i, label.String(), name.String(), attributes, isReal)
-			validIdNodes = append(validIdNodes, i)
 
-			currNode := graph.idNodeToNode[i]
-			makeChainByRenderScope(graph, prevNode, currNode)
-			if _, ok := commandsInsideRenderScope[currNode.name]; ok {
-				prevNode = currNode
-			}
+			graph.addNodeByIdAndNameAndAttrAndIsReal(i, label, name.String(), attributes, isReal)
+			validNodes = append(validNodes, graph.idNodeToNode[i])
 		}
 	}
 
-	addDebugMarkersToGraph(graph, validIdNodes)
+	addDebugMarkersToNodes(validNodes)
 
-	addDependencyToGraph := func(src, dest dependencygraph2.NodeID) error {
-		idSource, idSink := int(src), int(dest)
+	addDependencyToGraph := func(source, sink dependencygraph2.NodeID) error {
+		idSource, idSink := int(source), int(sink)
 		if sourceNode, ok := graph.idNodeToNode[idSource]; ok {
 			if sinkNode, ok := graph.idNodeToNode[idSink]; ok {
 				graph.addEdgeByNodes(sourceNode, sinkNode)
@@ -295,24 +252,29 @@ func GetGraphVisualizationFileFromCapture(ctx context.Context, p *path.Capture, 
 		SaveNodeAccesses:       true,
 		IncludeInitialCommands: true,
 	}
-	dependencyGraph, err := dependencygraph2.GetDependencyGraph(
-		ctx, p, config)
+	dependencyGraph, err := dependencygraph2.GetDependencyGraph(ctx, p, config)
 	if err != nil {
 		return "", err
 	}
 
 	graph, err := createGraphFromDependencyGraph(dependencyGraph)
-	graph.joinNodesByFrame()
-	file := ""
+	graph.makeAdjacentList()
+	graph.sortAdjacentList()
+	graph.assignColors()
+	graph.makeChunksByFrame()
+	fmt.Println("Number of nodes in the top level = ", graph.getNumberNodesInTopLevel())
+	fmt.Println("Total number of nodes and edges = ", graph.numberNodes, graph.numberEdges)
+
+	output := ""
 	if format == "pbtxt" {
-		file = graph.getPbtxtFile()
+		output = graph.getPbtxtFile()
 	} else if format == "proto" {
-		file = graph.getProtoFile()
+		output = graph.getProtoFile()
 	} else if format == "dot" {
-		file = graph.getDotFile()
+		output = graph.getDotFile()
 	} else {
 		return "", fmt.Errorf("Invalid format (Format supported: proto,pbtxt and dot)")
 	}
 
-	return file, err
+	return output, err
 }
