@@ -47,8 +47,8 @@ func areEqualGraphs(t *testing.T, wantedGraph *Graph, testedGraph *Graph) bool {
 		if reflect.DeepEqual(wantedNode.label , testedNode.label) == false {
 			t.Errorf("The labels from nodes with id %d are different %v != %v\n",id,wantedNode.label,testedNode.label)
 		}
-		if reflect.DeepEqual(wantedNode.label , testedNode.label) == false {
-			t.Errorf("The commandName from nodes with id %d are different %v != %v\n",id,wantedNode.commandName,testedNode.commandName)
+		if reflect.DeepEqual(wantedNode.name , testedNode.name) == false {
+			t.Errorf("The name from nodes with id %d are different %v != %v\n",id,wantedNode.name,testedNode.name)
 		}
 		wantedIncomingIdNodesSorted := getSortedKeys(wantedNode.incomingIdNodesToIdEdge)
 		testedIncomingIdNodesSorted := getSortedKeys(testedNode.incomingIdNodesToIdEdge)
@@ -129,26 +129,27 @@ func TestGraph2(t *testing.T){
 
 	wantedGraph := createGraph(0)
 	testedGraph := createGraph(0)
-	testedGraph.addNodeByIdAndCommandNameAndAttr(0,"A","vkCommandBuffer0","")
-	testedGraph.addNodeByIdAndCommandNameAndAttr(1,"A","vkCommandBuffer1","")
-	testedGraph.addNodeByIdAndCommandNameAndAttr(2,"A","vkCommandBuffer2","")
-	testedGraph.addNodeByIdAndCommandNameAndAttr(3,"A","vkCommandBuffer3","")
-	testedGraph.addNodeByIdAndCommandNameAndAttr(4,"A","vkCommandBuffer4","")
-	testedGraph.addNodeByIdAndCommandNameAndAttr(5,"A","vkCommandBuffer5","")
-	testedGraph.addNodeByIdAndCommandNameAndAttr(6,"A","vkCommandBuffer6","")
-	testedGraph.addNodeByIdAndCommandNameAndAttr(7,"A","vkCommandBuffer7","")
+	attributes := []string{}
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(0,"A","vkCommandBuffer0",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(1,"A","vkCommandBuffer1",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(2,"A","vkCommandBuffer2",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(3,"A","vkCommandBuffer3",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(4,"A","vkCommandBuffer4",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(5,"A","vkCommandBuffer5",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(6,"A","vkCommandBuffer6",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(7,"A","vkCommandBuffer7",attributes,true)
 	testedGraph.removeNodesWithZeroDegree()
 
 	if areEqualGraphs(t , wantedGraph , testedGraph) == false {
 		t.Errorf("The graphs are different\n")
 	}
 
-	wantedGraph.addNodeByIdAndCommandNameAndAttr(0,"A","vkCommandBuffer0","")
-	wantedGraph.addNodeByIdAndCommandNameAndAttr(2,"B","vkCommandBuffer2","")
-	wantedGraph.addNodeByIdAndCommandNameAndAttr(6,"C","vkCommandBuffer6","")
-	wantedGraph.addNodeByIdAndCommandNameAndAttr(3,"D","vkCommandBuffer3","")
-	wantedGraph.addNodeByIdAndCommandNameAndAttr(4,"E","vkCommandBuffer4","")
-	wantedGraph.addNodeByIdAndCommandNameAndAttr(5,"F","vkCommandBuffer5","")
+	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(0,"A","vkCommandBuffer0",attributes,true)
+	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(2,"B","vkCommandBuffer2",attributes,true)
+	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(6,"C","vkCommandBuffer6",attributes,true)
+	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(3,"D","vkCommandBuffer3",attributes,true)
+	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(4,"E","vkCommandBuffer4",attributes,true)
+	wantedGraph.addNodeByIdAndNameAndAttrAndIsReal(5,"F","vkCommandBuffer5",attributes,true)
 	wantedGraph.addEdgeByIdNodes(0 , 3)
 	wantedGraph.addEdgeByIdNodes(0 , 4)
 	wantedGraph.addEdgeByIdNodes(0 , 5)
@@ -159,20 +160,20 @@ func TestGraph2(t *testing.T){
 	wantedGraph.addEdgeByIdNodes(6 , 4)
 	wantedGraph.addEdgeByIdNodes(6 , 5)
 
-	testedGraph.addNodeByIdAndCommandNameAndAttr(0,"A","vkCommandBuffer0","")
-	testedGraph.addNodeByIdAndCommandNameAndAttr(2,"B","vkCommandBuffer2","")
-	testedGraph.addNodeByIdAndCommandNameAndAttr(6,"C","vkCommandBuffer6","")
-	testedGraph.addNodeByIdAndCommandNameAndAttr(3,"D","vkCommandBuffer3","")
-	testedGraph.addNodeByIdAndCommandNameAndAttr(4,"E","vkCommandBuffer4","")
-	testedGraph.addNodeByIdAndCommandNameAndAttr(5,"F","vkCommandBuffer5","")
-	testedGraph.addNodeByIdAndCommandNameAndAttr(1,"G","vkCommandBuffer1","")
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(0,"A","vkCommandBuffer0",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(2,"B","vkCommandBuffer2",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(6,"C","vkCommandBuffer6",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(3,"D","vkCommandBuffer3",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(4,"E","vkCommandBuffer4",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(5,"F","vkCommandBuffer5",attributes,true)
+	testedGraph.addNodeByIdAndNameAndAttrAndIsReal(1,"G","vkCommandBuffer1",attributes,true)
 	testedGraph.addEdgeByIdNodes(0,1)
 	testedGraph.addEdgeByIdNodes(2,1)
 	testedGraph.addEdgeByIdNodes(6,1)
 	testedGraph.addEdgeByIdNodes(1,3)
 	testedGraph.addEdgeByIdNodes(1,4)
 	testedGraph.addEdgeByIdNodes(1,5)
-	testedGraph.removeNodeKeepingEdges(1)
+	testedGraph.removeNodeByIdKeepingEdges(1)
 
 	if areEqualGraphs(t , wantedGraph , testedGraph) == false {
 		t.Errorf("The graphs are different\n")

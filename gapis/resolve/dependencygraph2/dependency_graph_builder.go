@@ -344,6 +344,9 @@ func (b *dependencyGraphBuilder) LogStats(ctx context.Context, full bool) {
 
 func BuildDependencyGraph(ctx context.Context, config DependencyGraphConfig,
 	c *capture.Capture, initialCmds []api.Cmd, initialRanges interval.U64RangeList) (DependencyGraph, error) {
+
+	config.SaveNodeAccesses = true
+
 	ctx = status.Start(ctx, "BuildDependencyGraph")
 	defer status.Finish(ctx)
 	b := newDependencyGraphBuilder(ctx, config, c, initialCmds)

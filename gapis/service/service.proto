@@ -318,6 +318,7 @@ message DCECaptureResponse {
 
 message GraphVisualizationFileRequest {
   path.Capture capture = 1;
+  string format = 2;
 }
 message GraphVisualizationFileResponse {
   oneof res {

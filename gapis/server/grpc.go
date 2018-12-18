@@ -399,7 +399,7 @@ func (s *grpcServer) DCECapture(ctx xctx.Context, req *service.DCECaptureRequest
 
 func (s *grpcServer) GetGraphVisualizationFile(ctx xctx.Context, req *service.GraphVisualizationFileRequest) (*service.GraphVisualizationFileResponse, error) {
 	defer s.inRPC()()
-	graphVisualizationFile , err := s.handler.GetGraphVisualizationFile(s.bindCtx(ctx), req.Capture)
+	graphVisualizationFile , err := s.handler.GetGraphVisualizationFile(s.bindCtx(ctx), req.Capture, req.Format)
 	if err := service.NewError(err); err != nil {
 		return &service.GraphVisualizationFileResponse{Res: &service.GraphVisualizationFileResponse_Error{Error: err}}, nil
 	}

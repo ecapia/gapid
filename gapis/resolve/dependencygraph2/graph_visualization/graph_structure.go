@@ -1,9 +1,12 @@
 package graph_visualization
 
 import (
+	"context"
 	"fmt"
-	"os"
-	"strconv"
+	"github.com/golang/protobuf/proto"
+	"github.com/google/gapid/core/data/protoconv"
+	"github.com/google/gapid/gapis/resolve/dependencygraph2"
+	"sort"
 )
 
 type Node struct {
@@ -11,9 +14,9 @@ type Node struct {
 	outcomingIdNodesToIdEdge map[int]int
 	id                       int
 	label                    string
-	commandName              string
-	idCommandType            int
-	attributes               string
+	name                     string
+	attributes               []string
+	isReal                   bool
 }
 
 type Edge struct {
@@ -67,48 +70,14 @@ func (g *Graph) addNodeById(id int, label string) bool {
 	return true
 }
 
-func (g *Graph) addNodeByIdAndIdCommandType(id int, label string, idCommandType int) bool {
+func (g *Graph) addNodeByIdAndNameAndAttrAndIsReal(id int, label string, name string, attributes []string, isReal bool) bool {
 	_, ok := g.idNodeToNode[id]
 	if ok == true {
 		return false
 	}
 
-	newNode := &Node{incomingIdNodesToIdEdge: map[int]int{}, outcomingIdNodesToIdEdge: map[int]int{},
-		id: id, idCommandType: idCommandType, label: label}
-	g.idNodeToNode[id] = newNode
-	g.numberNodes++
-	g.maxIdNode++
-	if g.maxIdNode <= id {
-		g.maxIdNode = id + 1
-	}
-	return true
-}
-
-func (g *Graph) addNodeByIdAndIdCommandTypeAndAttr(id int, label string, idCommandType int, attributes string) bool {
-	_, ok := g.idNodeToNode[id]
-	if ok == true {
-		return false
-	}
-
-	newNode := &Node{incomingIdNodesToIdEdge: map[int]int{}, outcomingIdNodesToIdEdge: map[int]int{},
-		id: id, idCommandType: idCommandType, label: label, attributes: attributes}
-	g.idNodeToNode[id] = newNode
-	g.numberNodes++
-	g.maxIdNode++
-	if g.maxIdNode <= id {
-		g.maxIdNode = id + 1
-	}
-	return true
-}
-
-func (g *Graph) addNodeByIdAndCommandNameAndAttr(id int, label string, commandName string, attributes string) bool {
-	_, ok := g.idNodeToNode[id]
-	if ok == true {
-		return false
-	}
-
-	newNode := &Node{incomingIdNodesToIdEdge: map[int]int{}, outcomingIdNodesToIdEdge: map[int]int{},
-		id: id, label: label, commandName: commandName, attributes: attributes}
+	newNode := &Node{incomingIdNodesToIdEdge: map[int]int{}, outcomingIdNodesToIdEdge: map[int]int{}, id: id, label: label,
+		name: name, attributes: attributes, isReal: isReal}
 	g.idNodeToNode[id] = newNode
 	g.numberNodes++
 	g.maxIdNode++
@@ -123,7 +92,6 @@ func (g *Graph) addEdge(newEdge *Edge) bool {
 	if _, ok := source.outcomingIdNodesToIdEdge[sink.id]; ok {
 		return false
 	}
-
 	id := g.maxIdEdge
 	g.idEdgeToEdge[id] = newEdge
 	g.numberEdges++
@@ -134,7 +102,7 @@ func (g *Graph) addEdge(newEdge *Edge) bool {
 	return true
 }
 
-func (g *Graph) addEdgeByNode(source, sink *Node) {
+func (g *Graph) addEdgeByNodes(source, sink *Node) {
 	id := g.maxIdEdge
 	newEdge := &Edge{source: source, sink: sink, id: id}
 	g.addEdge(newEdge)
@@ -160,14 +128,12 @@ func (g *Graph) removeEdgeById(id int) bool {
 	source, sink := edge.source, edge.sink
 	delete(source.outcomingIdNodesToIdEdge, sink.id)
 	delete(sink.incomingIdNodesToIdEdge, source.id)
-
 	delete(g.idEdgeToEdge, id)
 	g.numberEdges--
 	return true
 }
 
 func (g *Graph) removeNodeById(id int) bool {
-
 	node, ok := g.idNodeToNode[id]
 	if ok == false {
 		return false
@@ -186,7 +152,6 @@ func (g *Graph) removeNodeById(id int) bool {
 }
 
 func (g *Graph) removeNodesWithZeroDegree() {
-
 	for id, node := range g.idNodeToNode {
 		if (len(node.incomingIdNodesToIdEdge) + len(node.outcomingIdNodesToIdEdge)) == 0 {
 			g.removeNodeById(id)
@@ -195,7 +160,6 @@ func (g *Graph) removeNodesWithZeroDegree() {
 }
 
 func (g *Graph) joinEdgesThroughtNode(idNode int) bool {
-
 	node, ok := g.idNodeToNode[idNode]
 	if ok == false {
 		return false
@@ -208,81 +172,14 @@ func (g *Graph) joinEdgesThroughtNode(idNode int) bool {
 	return true
 }
 
-func (g *Graph) removeNodeKeepingEdges(idNode int) bool {
-	if g.joinEdgesThroughtNode(idNode) == false {
+func (g *Graph) removeNodeByIdKeepingEdges(id int) bool {
+	if g.joinEdgesThroughtNode(id) == false {
 		return false
 	}
-	if g.removeNodeById(idNode) == false {
+	if g.removeNodeById(id) == false {
 		return false
 	}
 	return true
-}
-
-func (g *Graph) dfs(curr *Node, time, mini, idInSCC, s *[]int, currSCC, counter *int) {
-	*s = append(*s, curr.id)
-	(*time)[curr.id] = *counter
-	(*mini)[curr.id] = *counter
-	(*counter)++
-
-	for idNext := range curr.outcomingIdNodesToIdEdge {
-		next := g.idNodeToNode[idNext]
-		if (*time)[next.id] == 0 {
-			g.dfs(next, time, mini, idInSCC, s, currSCC, counter)
-		}
-		if (*time)[next.id] != -1 {
-			if (*mini)[next.id] < (*mini)[curr.id] {
-				(*mini)[curr.id] = (*mini)[next.id]
-			}
-		}
-	}
-
-	if (*mini)[curr.id] == (*time)[curr.id] {
-		for {
-			tmp := (*s)[len(*s)-1]
-			(*time)[tmp] = -1
-			*s = (*s)[:len(*s)-1]
-			(*idInSCC)[tmp] = *currSCC
-			if tmp == curr.id {
-				break
-			}
-		}
-		(*currSCC)++
-	}
-}
-
-func (g *Graph) getSCC() []int {
-	currSCC := 0
-	counter := 1
-	time := make([]int, g.maxIdNode)
-	mini := make([]int, g.maxIdNode)
-	idInSCC := make([]int, g.maxIdNode)
-	s := make([]int, 0)
-
-	for _, curr := range g.idNodeToNode {
-		if time[curr.id] == 0 {
-			g.dfs(curr, &time, &mini, &idInSCC, &s, &currSCC, &counter)
-		}
-	}
-	return idInSCC
-}
-
-func (g *Graph) makeSccCompressionByIdCommandType() {
-	newGraph := createGraph(0)
-	for _, curr := range g.idNodeToNode {
-		newGraph.addNodeById(curr.idCommandType, "")
-	}
-
-	for _, curr := range g.idNodeToNode {
-		for idNext := range curr.outcomingIdNodesToIdEdge {
-			next := g.idNodeToNode[idNext]
-			newGraph.addEdgeByIdNodes(curr.idCommandType, next.idCommandType)
-		}
-	}
-	idInSCC := newGraph.getSCC()
-	for _, curr := range g.idNodeToNode {
-		scc := idInSCC[curr.idCommandType]
-		curr.label = curr.label + "/" + fmt.Sprintf("scc%d", scc)
-	}
 }
 
 func printMap(m map[int]int) {
@@ -292,8 +189,8 @@ func printMap(m map[int]int) {
 }
 
 func (g *Graph) printEdges() {
-	for _, e := range g.idEdgeToEdge {
-		fmt.Println(" ( ", e.source.id, ",", e.sink.id, ")", "idEdge = ", e.id)
+	for _, edge := range g.idEdgeToEdge {
+		fmt.Println(" ( ", edge.source.id, ",", edge.sink.id, ")", "idEdge = ", edge.id)
 	}
 }
 
@@ -307,50 +204,20 @@ func (g *Graph) printNodes() {
 	}
 }
 
-func (g *Graph) writeEdges(f *os.File) {
-	for _, e := range g.idEdgeToEdge {
-		line := strconv.Itoa(e.source.id) + " -> " + strconv.Itoa(e.sink.id) + ";\n"
-		f.WriteString(line)
-	}
-}
-
-func (g *Graph) writeNodes(f *os.File) {
-	for _, n := range g.idNodeToNode {
-		line := strconv.Itoa(n.id) + "[label=" + n.label + "]" + ";\n"
-		f.WriteString(line)
-	}
-}
-
-func (g *Graph) writeDigraph(filename string) {
-	_, e := os.Stat(filename)
-	if os.IsNotExist(e) {
-		os.Create(filename)
-	}
-
-	f, err := os.OpenFile(filename, os.O_RDWR, 0600)
-	if err != nil {
-		panic(err)
-	}
-	f.WriteString("digraph g {\n")
-	g.writeNodes(f)
-	g.writeEdges(f)
-	f.WriteString("}\n")
-}
-
 func (g *Graph) getEdgesAsString() string {
 	output := ""
-	for _, e := range g.idEdgeToEdge {
-		line := strconv.Itoa(e.source.id) + " -> " + strconv.Itoa(e.sink.id) + ";\n"
-		output += line
+	for _, edge := range g.idEdgeToEdge {
+		lines := fmt.Sprintf("%d", edge.source.id) + " -> " + fmt.Sprintf("%d", edge.sink.id) + ";\n"
+		output += lines
 	}
 	return output
 }
 
 func (g *Graph) getNodesAsString() string {
 	output := ""
-	for _, n := range g.idNodeToNode {
-		line := strconv.Itoa(n.id) + "[label=" + n.label + "]" + ";\n"
-		output += line
+	for _, node := range g.idNodeToNode {
+		lines := fmt.Sprintf("%d", node.id) + "[label=" + "\"" + node.label + "\"" + "]" + ";\n"
+		output += lines
 	}
 	return output
 }
@@ -365,21 +232,54 @@ func (g *Graph) getDotFile() string {
 
 func (g *Graph) getPbtxtFile() string {
 	output := ""
-
-	for _, node := range g.idNodeToNode {
-		line := "node {\n"
-		line += "name: " + node.label + "\n"
-		line += "op: " + node.label + "\n"
-		for idNeighbor := range node.incomingIdNodesToIdEdge {
-			nodeNeighbor := g.idNodeToNode[idNeighbor]
-			line += "input: " + nodeNeighbor.label + "\n"
-		}
-		line += "attr {\n"
-		line += "key: " + "\"" + node.commandName + "\"\n"
-		line += "}\n"
-
-		line += "}\n"
-		output += line
+	orderedIdNodes := []int{}
+	for id := range g.idNodeToNode {
+		orderedIdNodes = append(orderedIdNodes, id)
 	}
+	sort.Ints(orderedIdNodes)
+	for _, idNode := range orderedIdNodes {
+		node := g.idNodeToNode[idNode]
+		if node.isReal == false {
+			continue
+		}
+		lines := "node {\n"
+		lines += "\tname: " + "\"" + node.label + "\"" + "\n"
+		lines += "\top: " + "\"" + node.label + "\"" + "\n"
+
+		orderedIdEdges := []int{}
+		for idNeighbor := range node.incomingIdNodesToIdEdge {
+			orderedIdEdges = append(orderedIdEdges, idNeighbor)
+		}
+		sort.Ints(orderedIdEdges)
+
+		for _, idNeighbor := range orderedIdEdges {
+			nodeNeighbor := g.idNodeToNode[idNeighbor]
+			if nodeNeighbor.isReal == false {
+				continue
+			}
+			lines += "\tinput: " + "\"" + nodeNeighbor.label + "\"" + "\n"
+		}
+
+		for i, val := range node.attributes {
+			lines += "\t\tattr {\n"
+			lines += "\t\t\tkey: " + "Param" + fmt.Sprintf("%d", i+1) + "\n"
+			lines += "\t\t\tvalue {\n"
+			lines += "\t\t\t\t\t" + val + "  \n"
+			lines += "\t\t\t}\n"
+			lines += "\t\t}\n"
+		}
+
+		lines += "}\n"
+		output += lines
+	}
+	return output
+}
+
+func getProtoFile(ctx context.Context, dependencyGraph dependencygraph2.DependencyGraph) string {
+	msg, err := protoconv.ToProto(ctx, dependencyGraph)
+	if err != nil {
+		panic(msg)
+	}
+	output := proto.MarshalTextString(msg)
 	return output
 }

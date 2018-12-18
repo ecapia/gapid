@@ -33,12 +33,18 @@ func init() {
 		Action:    verb,
 	})
 }
-
+func getLastLevelNameFromCapturePath(capturePath string) string {
+	for i := len(capturePath) -1; i >= 0 ; i-- {
+		if capturePath[i] == '/' {
+			return capturePath[i + 1:]
+		}
+	}
+	return capturePath
+}
 func (verb *graph_visualizationVerb) Run(ctx context.Context, flags flag.FlagSet) error {
 
-	log.I(ctx , "1. I am in the Run function!!")
 	if flags.NArg() != 1 {
-		app.Usage(ctx, "Exactly one gfx capture file expected, got %d", flags.NArg())
+		app.Usage(ctx, "Exactly two parameters expected:  trace file path and output format, got %d", flags.NArg())
 		return nil
 	}
 
@@ -57,16 +63,18 @@ func (verb *graph_visualizationVerb) Run(ctx context.Context, flags flag.FlagSet
 	if err != nil {
 		return log.Errf(ctx, err, "LoadCapture(%v)", capturePath)
 	}
-
-	graphVisualizationFile, err := client.GetGraphVisualizationFile(ctx, capture)
+	format := verb.Format
+	graphVisualizationFile, err := client.GetGraphVisualizationFile(ctx, capture,format)
 	if err != nil {
 		return log.Errf(ctx, err, "ExportCapture(%v)", capture)
 	}
 
 	graphVisualizationName := verb.Out
 	if graphVisualizationName == "" {
-		graphVisualizationName = "graph_visualizatione.dot"
+		graphVisualizationName = getLastLevelNameFromCapturePath(capturePath)
 	}
+	graphVisualizationName +="." + format
+
 	if err := ioutil.WriteFile(graphVisualizationName, []byte(graphVisualizationFile), 0666); err != nil {
 		return log.Errf(ctx, err, "Writing file: %v", graphVisualizationName)
 	}

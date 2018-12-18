@@ -300,13 +300,9 @@ func (s *server) DCECapture(ctx context.Context, p *path.Capture, requested []*p
 }
 
 
-func (s *server) GetGraphVisualizationFile(ctx context.Context, p *path.Capture) (string, error) {
-	ctx = log.Enter(ctx, "Inside GetGraphVisualizationFile function")
-	c, err := capture.ResolveFromPath(ctx, p)
-	if err != nil {
-		return "", err
-	}
-	graphVisualizationFile , err := graph_visualization.GetGraphVisualizationFileFromCapture(ctx, c)
+func (s *server) GetGraphVisualizationFile(ctx context.Context, p *path.Capture,format string) (string, error) {
+	ctx = log.Enter(ctx, "GetGraphVisualizationFile")
+	graphVisualizationFile , err := graph_visualization.GetGraphVisualizationFileFromCapture(ctx, p,format)
 	if err != nil {
 		return "", err
 	}

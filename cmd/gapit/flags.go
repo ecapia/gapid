@@ -342,5 +342,8 @@ type (
 		Gapis         GapisFlags
 		Gapir         GapirFlags
 		Out string `help:"path to Save Dot File"`
+		Format		string `help: "foutput format: proto pbtxtx dot"`
 	}
+
 )
+
