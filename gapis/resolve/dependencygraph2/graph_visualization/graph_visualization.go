@@ -1,6 +1,7 @@
 package graph_visualization
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/google/gapid/gapis/api"
@@ -21,8 +22,9 @@ const (
 	COMMAND_END_DEBUG_MARKER   = "vkCmdDebugMarkerEndEXT"
 	COMMAND_DEBUG_MARKER       = "vkCmdDebugMarker"
 	COMMAND_BEGIN_RENDER_PASS  = "vkCmdBeginRenderPass"
-	MAXIMUM_LEVEL_IN_HIERARCHY = 5
 	COMMAND_BUFFER             = "commandBuffer"
+	EMPTY                      = "Empty"
+	MAXIMUM_LEVEL_IN_HIERARCHY = 5
 )
 
 type HierarchyNames struct {
@@ -53,7 +55,6 @@ func getNameForCommandAndSubCommandHierarchy() (*HierarchyNames, *HierarchyNames
 	subCommandHierarchyNames.add("vkCmdNextSubpass", "vkCmdNextSubpass", "vkSubpass")
 	return commandHierarchyNames, subCommandHierarchyNames
 }
-
 func splitLabelByChar(label *string, splitChar byte) []string {
 	output := []string{}
 	prevPos := 0
@@ -135,29 +136,28 @@ func addDebugMarkersToGraph(graph *Graph, idNodes []int) {
 func getCommandBuffer(command api.Cmd) string {
 	parameters := command.CmdParams()
 	for _, v := range parameters {
-		if v.Name == "commandBuffer" {
+		if v.Name == COMMAND_BUFFER {
 			commandBuffer := v.Name + fmt.Sprintf("%d", v.Get())
 			return commandBuffer
 		}
 	}
 	return ""
 }
-
 func getCommandLabel(command api.Cmd, idCommandNode uint64, commandHierarchyNames *HierarchyNames, labelToHierarchy *map[string]*Hierarchy) string {
-	commandName := command.CmdName()
-	label := ""
+	commmandName := command.CmdName()
+	var label bytes.Buffer
 	if commandBuffer := getCommandBuffer(command); commandBuffer != "" {
 		if _, ok := (*labelToHierarchy)[commandBuffer]; ok == false {
 			(*labelToHierarchy)[commandBuffer] = &Hierarchy{}
 		}
 		currentHierarchy := (*labelToHierarchy)[commandBuffer]
-		label += commandBuffer + "/"
-		label += getLabelFromHierarchy(commandName, commandHierarchyNames, currentHierarchy)
-		label += fmt.Sprintf("%d_%s", idCommandNode, commandName)
+		label.WriteString(commandBuffer + "/")
+		label.WriteString(getLabelFromHierarchy(commmandName, commandHierarchyNames, currentHierarchy))
+		label.WriteString(fmt.Sprintf("%d_%s", idCommandNode, commmandName))
 	} else {
-		label += fmt.Sprintf("%d_%s", idCommandNode, commandName)
+		label.WriteString(fmt.Sprintf("%d_%s", idCommandNode, commmandName))
 	}
-	return label
+	return label.String()
 }
 
 func getLabelFromHierarchy(name string, hierarchyNames *HierarchyNames, currentHierarchy *Hierarchy) string {
@@ -169,9 +169,9 @@ func getLabelFromHierarchy(name string, hierarchyNames *HierarchyNames, currentH
 			currentHierarchy.currentLevel = currentLevel + 1
 		}
 	}
-	label := ""
+	var label bytes.Buffer
 	for i := 0; i < currentHierarchy.currentLevel; i++ {
-		label += fmt.Sprintf("%d_%s/", currentHierarchy.idLevels[i], hierarchyNames.listNames[i])
+		label.WriteString(fmt.Sprintf("%d_%s/", currentHierarchy.idLevels[i], hierarchyNames.listNames[i]))
 	}
 	if _, ok := hierarchyNames.beginNames[name]; ok {
 		if name == COMMAND_BEGIN_RENDER_PASS {
@@ -180,7 +180,7 @@ func getLabelFromHierarchy(name string, hierarchyNames *HierarchyNames, currentH
 		}
 	}
 	currentHierarchy.SetZeroFrom(currentHierarchy.currentLevel)
-	return label
+	return label.String()
 }
 
 func makeChainByRenderScope(graph *Graph, prevNode *Node, currNode *Node) {
@@ -193,9 +193,9 @@ func makeChainByRenderScope(graph *Graph, prevNode *Node, currNode *Node) {
 	}
 }
 
-func getSubCommandLabel(commandNode dependencygraph2.CmdNode, commandName string, subCommandToLabel *map[string]string) (string, string) {
-	subCommandName := commandName
-	label := commandName
+func getSubCommandLabel(commandNode dependencygraph2.CmdNode, commmandName string, subCommandToLabel *map[string]string) (string, string) {
+	subCommandName := commmandName
+	label := commmandName
 	for i := 1; i < len(commandNode.Index); i++ {
 		subCommandName += fmt.Sprintf("/%d", commandNode.Index[i])
 		if i+1 < len(commandNode.Index) {
@@ -208,9 +208,11 @@ func getSubCommandLabel(commandNode dependencygraph2.CmdNode, commandName string
 	}
 	return label, subCommandName
 }
-func createGraphFromDependencyGraph(graphReceived dependencygraph2.DependencyGraph) (*Graph, error) {
+
+func createGraphFromDependencyGraph(dependencyGraph dependencygraph2.DependencyGraph) (*Graph, error) {
+
 	graph := createGraph(0)
-	numberNodes := graphReceived.NumNodes()
+	numberNodes := dependencyGraph.NumNodes()
 	commandHierarchyNames, subCommandHierarchyNames := getNameForCommandAndSubCommandHierarchy()
 	subCommandToLabel := map[string]string{}
 	labelToHierarchy := map[string]*Hierarchy{}
@@ -218,26 +220,27 @@ func createGraphFromDependencyGraph(graphReceived dependencygraph2.DependencyGra
 	validIdNodes := []int{}
 
 	for i := 0; i < numberNodes; i++ {
-		dependencyNode := graphReceived.GetNode(dependencygraph2.NodeID(i))
+		dependencyNode := dependencyGraph.GetNode(dependencygraph2.NodeID(i))
 		if commandNode, ok := dependencyNode.(dependencygraph2.CmdNode); ok {
 			idCommandNode := commandNode.Index[0]
-			command := graphReceived.GetCommand(api.CmdID(idCommandNode))
-			name, label := "", ""
+			command := dependencyGraph.GetCommand(api.CmdID(idCommandNode))
+			var name, label bytes.Buffer
 
+			isReal := api.CmdID(idCommandNode).IsReal()
 			if len(commandNode.Index) == 1 {
-				label += getCommandLabel(command, idCommandNode, commandHierarchyNames, &labelToHierarchy)
-				name = command.CmdName()
+				label.WriteString(getCommandLabel(command, idCommandNode, commandHierarchyNames, &labelToHierarchy))
+				name.WriteString(command.CmdName())
 			} else {
 				if len(commandNode.Index) > 1 {
-					commandName := fmt.Sprintf("%d_%s", idCommandNode, command.CmdName())
-					subCommandLabel, tmpLabel := getSubCommandLabel(commandNode, commandName, &subCommandToLabel)
+					commmandName := fmt.Sprintf("%d_%s", idCommandNode, command.CmdName())
+					subCommandLabel, tmpLabel := getSubCommandLabel(commandNode, commmandName, &subCommandToLabel)
 					if _, ok := labelToHierarchy[subCommandLabel]; ok == false {
 						labelToHierarchy[subCommandLabel] = &Hierarchy{}
 					}
 
 					currentHierarchy := labelToHierarchy[subCommandLabel]
-					dependencyNodeAccesses := graphReceived.GetNodeAccesses(dependencygraph2.NodeID(i))
-					subCommandName := "empty"
+					dependencyNodeAccesses := dependencyGraph.GetNodeAccesses(dependencygraph2.NodeID(i))
+					subCommandName := EMPTY
 					if len(dependencyNodeAccesses.InitCmdNodes) > 0 {
 						subCommandName = graph.idNodeToNode[int(dependencyNodeAccesses.InitCmdNodes[0])].name
 					}
@@ -245,17 +248,16 @@ func createGraphFromDependencyGraph(graphReceived dependencygraph2.DependencyGra
 					hierarchyLabel += fmt.Sprintf("%d_", commandNode.Index[len(commandNode.Index)-1]) + subCommandName
 					subCommandToLabel[tmpLabel] = hierarchyLabel
 
-					label += subCommandLabel + "/"
-					label += hierarchyLabel
-					name = subCommandName
+					label.WriteString(subCommandLabel + "/")
+					label.WriteString(hierarchyLabel)
+					name.WriteString(subCommandName)
 				}
 			}
 			attributes := []string{}
 			for _, property := range command.CmdParams() {
 				attributes = append(attributes, property.Name+fmt.Sprintf("%d", property.Get()))
 			}
-
-			graph.addNodeByIdAndNameAndAttrAndIsReal(i, label, name, attributes, api.CmdID(idCommandNode).IsReal())
+			graph.addNodeByIdAndNameAndAttrAndIsReal(i, label.String(), name.String(), attributes, isReal)
 			validIdNodes = append(validIdNodes, i)
 
 			currNode := graph.idNodeToNode[i]
@@ -268,17 +270,17 @@ func createGraphFromDependencyGraph(graphReceived dependencygraph2.DependencyGra
 
 	addDebugMarkersToGraph(graph, validIdNodes)
 
-	addDependencyToGraph := func(src, dest dependencygraph2.NodeID) error {
-		idSrc, idDest := int(src), int(dest)
-		if srcNode, ok1 := graph.idNodeToNode[idSrc]; ok1 {
-			if destNode, ok2 := graph.idNodeToNode[idDest]; ok2 {
-				graph.addEdgeByNodes(srcNode, destNode)
+	addDependencyToGraph := func(source, sink dependencygraph2.NodeID) error {
+		idSource, idSink := int(source), int(sink)
+		if sourceNode, ok1 := graph.idNodeToNode[idSource]; ok1 {
+			if sinkNode, ok2 := graph.idNodeToNode[idSink]; ok2 {
+				graph.addEdgeByNodes(sourceNode, sinkNode)
 			}
 		}
 		return nil
 	}
 
-	err := graphReceived.ForeachDependency(addDependencyToGraph)
+	err := dependencyGraph.ForeachDependency(addDependencyToGraph)
 	return graph, err
 }
 
@@ -297,9 +299,9 @@ func GetGraphVisualizationFileFromCapture(ctx context.Context, p *path.Capture, 
 	graph.joinNodesByFrame()
 	file := ""
 	if format == "pbtxt" {
-		file = graph.getPbtxtFile()
+		file = graph.getPbtxtFileFaster()
 	} else if format == "proto" {
-		file = getProtoFile(ctx, dependencyGraph)
+		file = graph.getProtoFile()
 	} else if format == "dot" {
 		file = graph.getDotFile()
 	} else {

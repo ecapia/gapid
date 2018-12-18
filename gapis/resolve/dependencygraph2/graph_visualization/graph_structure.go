@@ -1,11 +1,13 @@
 package graph_visualization
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/gapid/core/data/protoconv"
 	"github.com/google/gapid/gapis/resolve/dependencygraph2"
+	"github.com/google/gapid/gapis/resolve/dependencygraph2/graph_visualization/protobuf"
 	"sort"
 )
 
@@ -19,6 +21,7 @@ type Node struct {
 	id                       int
 	label                    string
 	name                     string
+	nameFrame                string
 	attributes               []string
 	isReal                   bool
 }
@@ -190,24 +193,51 @@ func (g *Graph) removeNodeByIdKeepingEdges(id int) bool {
 	return true
 }
 
-func (g *Graph) dfs(node *Node, visited *[]bool, numFrame *int) {
+func getKeysSortedFromMap(input map[int]int) []int {
+	sortedKeys := []int{}
+	for key := range input {
+		sortedKeys = append(sortedKeys, key)
+	}
+	sort.Ints(sortedKeys)
+	return sortedKeys
+}
+
+func (g *Graph) dfs(node *Node, visited *[]bool, numberFrame *int) {
 	(*visited)[node.id] = true
-	node.label = QUEUE_PRESENT + fmt.Sprintf("%d/", *numFrame) + node.label
-	for idNeighbor := range node.outcomingIdNodesToIdEdge {
+	node.nameFrame = QUEUE_PRESENT + fmt.Sprintf("%d", *numberFrame)
+	idNeighbors := getKeysSortedFromMap(node.outcomingIdNodesToIdEdge)
+	for _, idNeighbor := range idNeighbors {
 		neighbor := g.idNodeToNode[idNeighbor]
 		if (*visited)[neighbor.id] == false {
-			g.dfs(neighbor, visited, numFrame)
+			g.dfs(neighbor, visited, numberFrame)
 		}
 	}
 }
 
 func (g *Graph) joinNodesByFrame() {
 	visited := make([]bool, g.maxIdNode)
-	numFrame := 0
+	numberFrame := 1
 	for i := 0; i < g.maxIdNode; i++ {
-		if node, ok := g.idNodeToNode[i]; ok && node.name == QUEUE_PRESENT {
-			g.dfs(node, &visited, &numFrame)
-			numFrame++
+		if node, ok := g.idNodeToNode[i]; ok && node.name == QUEUE_PRESENT && visited[node.id] == false {
+			g.dfs(node, &visited, &numberFrame)
+			numberFrame++
+		}
+	}
+	for i := 0; i < g.maxIdNode; i++ {
+		if node, ok := g.idNodeToNode[i]; ok && visited[node.id] == false {
+			idNeighbors := getKeysSortedFromMap(node.outcomingIdNodesToIdEdge)
+			for _, idNeighbor := range idNeighbors {
+				neighbor := g.idNodeToNode[idNeighbor]
+				if neighbor.nameFrame != "" {
+					node.nameFrame = neighbor.nameFrame
+					break
+				}
+			}
+		}
+	}
+	for _, node := range g.idNodeToNode {
+		if node.nameFrame != "" {
+			node.label = node.nameFrame + "/" + node.label
 		}
 	}
 }
@@ -236,6 +266,55 @@ func (g *Graph) getDotFile() string {
 	output += g.getEdgesAsString()
 	output += "}\n"
 	return output
+}
+
+func (g *Graph) getNumberNodesTopLevel() int {
+	uniques := map[string]int{}
+	for _, node := range g.idNodeToNode {
+		node := splitLabelByChar(&node.label, '/')
+		uniques[node[0]] = 1
+	}
+	return len(uniques)
+}
+
+func (g *Graph) getPbtxtFileFaster() string {
+	var output bytes.Buffer
+	validIdNodes := []int{}
+	for id, node := range g.idNodeToNode {
+		if node.isReal {
+			validIdNodes = append(validIdNodes, id)
+		}
+	}
+	sort.Ints(validIdNodes)
+
+	for _, idNode := range validIdNodes {
+		node := g.idNodeToNode[idNode]
+		output.WriteString("node {\n")
+		output.WriteString("\tname: \"" + node.label + "\"\n")
+		output.WriteString("\top: \"" + node.label + "\"\n")
+
+		validIdNeighbors := []int{}
+		for idNeighbor := range node.incomingIdNodesToIdEdge {
+			if g.idNodeToNode[idNeighbor].isReal {
+				validIdNeighbors = append(validIdNeighbors, idNeighbor)
+			}
+		}
+		sort.Ints(validIdNeighbors)
+		for _, idNeighbor := range validIdNeighbors {
+			neighbor := g.idNodeToNode[idNeighbor]
+			output.WriteString("\tinput: \"" + neighbor.label + "\"\n")
+		}
+		for i, val := range node.attributes {
+			output.WriteString("\t\tattr {\n")
+			output.WriteString("\t\t\tkey: " + "Param" + fmt.Sprintf("%d", i+1) + "\n")
+			output.WriteString("\t\t\tvalue {\n")
+			output.WriteString("\t\t\t\t\t" + val + "  \n")
+			output.WriteString("\t\t\t}\n")
+			output.WriteString("\t\t}\n")
+		}
+		output.WriteString("}\n")
+	}
+	return output.String()
 }
 
 func (g *Graph) getPbtxtFile() string {
@@ -286,11 +365,54 @@ func (g *Graph) getPbtxtFile() string {
 	return output
 }
 
-func getProtoFile(ctx context.Context, g dependencygraph2.DependencyGraph) string {
+func getProtoFileFromDependencyGraph(ctx context.Context, g dependencygraph2.DependencyGraph) string {
 	msg, err := protoconv.ToProto(ctx, g)
 	if err != nil {
 		panic(msg)
 	}
 	output := proto.MarshalTextString(msg)
 	return output
+}
+
+func (g *Graph) getProtoFile() string {
+	validIdNodes := []int{}
+	for id, node := range g.idNodeToNode {
+		if node.isReal {
+			validIdNodes = append(validIdNodes, id)
+		}
+	}
+	sort.Ints(validIdNodes)
+	numberValidNodes := len(validIdNodes)
+
+	protoGraph := &protobuf.Graph{}
+	protoGraph.Nodes = make([]*protobuf.Node, numberValidNodes)
+
+	for i, idNode := range validIdNodes {
+		tmp := g.getNodeProto(idNode)
+		protoGraph.Nodes[i] = tmp
+	}
+
+	output := proto.MarshalTextString(protoGraph)
+	return output
+}
+
+func (g *Graph) getNodeProto(idNode int) *protobuf.Node {
+	protoNode := &protobuf.Node{}
+	node := g.idNodeToNode[idNode]
+	protoNode.Name = node.label
+	protoNode.Op = node.label
+
+	validIdNeighbors := []int{}
+	for idNeighbor := range node.incomingIdNodesToIdEdge {
+		if g.idNodeToNode[idNeighbor].isReal {
+			validIdNeighbors = append(validIdNeighbors, idNeighbor)
+		}
+	}
+	sort.Ints(validIdNeighbors)
+	numberValidNeighbors := len(validIdNeighbors)
+	protoNode.Input = make([]string, numberValidNeighbors)
+	for i, idNeighbor := range validIdNeighbors {
+		protoNode.Input[i] = g.idNodeToNode[idNeighbor].label
+	}
+	return protoNode
 }
