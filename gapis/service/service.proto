@@ -564,8 +564,8 @@ service Gapid {
   rpc DCECapture(DCECaptureRequest) returns (DCECaptureResponse) {
   }
 
-  rpc GetGraphVisualizationFile(GraphVisualizationFileRequest) returns (GraphVisualizationFileResponse) {
-  
+  rpc GetGraphVisualizationFile(GraphVisualizationFileRequest)
+      returns (GraphVisualizationFileResponse) {
   }
   // GetDevices returns the full list of replay devices avaliable to the server.
   // These include local replay devices and any connected Android devices.

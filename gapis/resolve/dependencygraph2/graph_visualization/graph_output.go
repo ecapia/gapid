@@ -37,7 +37,6 @@ func (g *Graph) getDotFile() string {
 	return output
 }
 
-
 func (g *Graph) getPbtxtFile() string {
 	var output bytes.Buffer
 	totalRealNodes := 0

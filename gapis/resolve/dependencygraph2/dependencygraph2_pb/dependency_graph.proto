@@ -52,7 +52,7 @@ message MemoryAccess {
   uint64 start = 3;
   uint64 end = 4;
   AccessMode mode = 5;
-  repeated uint64 dependencies=6;
+  repeated uint64 dependencies = 6;
 }
 
 message ForwardAccess {
@@ -82,13 +82,14 @@ message MapIndexFragment {
     string stringIndex = 2;
   }
 }
-message CompleteFragment{}
+message CompleteFragment {
+}
 
 enum AccessMode {
   _ = 0;
-	ACCESS_READ       = 1;
-	ACCESS_WRITE      = 2;
-	ACCESS_READ_WRITE = 3;
+  ACCESS_READ = 1;
+  ACCESS_WRITE = 2;
+  ACCESS_READ_WRITE = 3;
 }
 
 enum ForwardAccessMode {

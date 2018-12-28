@@ -19,13 +19,13 @@ var (
 )
 
 const (
-	COMMAND_QUEUE_SUBMIT       = "vkQueueSubmit"
-	COMMAND_BEGIN_DEBUG_MARKER = "vkCmdDebugMarkerBeginEXT"
-	COMMAND_END_DEBUG_MARKER   = "vkCmdDebugMarkerEndEXT"
-	COMMAND_DEBUG_MARKER       = "vkCmdDebugMarker"
-	COMMAND_BEGIN_RENDER_PASS  = "vkCmdBeginRenderPass"
+	VK_QUEUE_SUBMIT            = "vkQueueSubmit"
+	VK_CMD_DEBUG_MARKER_BEGIN  = "vkCmdDebugMarkerBeginEXT"
+	VK_CMD_DEBUG_MARKER_END    = "vkCmdDebugMarkerEndEXT"
+	VK_CMD_DEBUG_MARKER        = "vkCmdDebugMarker"
+	VK_CMD_BEGIN_RENDER_PASS   = "vkCmdBeginRenderPass"
 	COMMAND_BUFFER             = "commandBuffer"
-	EMPTY_NAME                 = "Empty"
+	EMPTY                      = "Empty"
 	MAXIMUM_LEVEL_IN_HIERARCHY = 10
 )
 
@@ -75,11 +75,11 @@ func addDebugMarkersToNodes(nodes []*Node) {
 	posBeginDebugMarker := -1
 	labelBeginDebugMarker := &Label{}
 	for pos, node := range nodes {
-		if node.name == COMMAND_BEGIN_DEBUG_MARKER {
+		if node.name == VK_CMD_DEBUG_MARKER_BEGIN {
 			posBeginDebugMarker = pos
 			labelBeginDebugMarker = node.label
 		} else {
-			if posBeginDebugMarker >= 0 && node.name == COMMAND_END_DEBUG_MARKER {
+			if posBeginDebugMarker >= 0 && node.name == VK_CMD_DEBUG_MARKER_END {
 				labelEndDebugMarker := node.label
 				if len(labelBeginDebugMarker.id) == len(labelEndDebugMarker.id) &&
 					getMaxCommonPrefix(labelBeginDebugMarker, labelEndDebugMarker) == len(labelEndDebugMarker.id)-1 {
@@ -87,7 +87,7 @@ func addDebugMarkersToNodes(nodes []*Node) {
 						nodeInDebugMarker := nodes[i]
 						size := len(nodeInDebugMarker.label.id)
 						nodeInDebugMarker.label.pushBack(nodeInDebugMarker.label.name[size-1], nodeInDebugMarker.label.id[size-1])
-						nodeInDebugMarker.label.update(size-1, COMMAND_DEBUG_MARKER, 0)
+						nodeInDebugMarker.label.update(size-1, VK_CMD_DEBUG_MARKER, 0)
 					}
 				}
 				posBeginDebugMarker = -1
@@ -126,24 +126,30 @@ func getCommandLabel(command api.Cmd, idCommandNode uint64, commandHierarchyName
 
 func getLabelFromHierarchy(name string, hierarchyNames *HierarchyNames, currentHierarchy *Hierarchy) *Label {
 	label := &Label{}
+	isEndCommand := false
 	if currentLevel, ok := hierarchyNames.beginNames[name]; ok && currentLevel <= currentHierarchy.currentLevel {
 		currentHierarchy.idLevels[currentLevel]++
 		currentHierarchy.currentLevel = currentLevel + 1
 	} else {
 		if currentLevel, ok := hierarchyNames.endNames[name]; ok && currentLevel <= currentHierarchy.currentLevel {
 			currentHierarchy.currentLevel = currentLevel + 1
+			isEndCommand = true
 		}
 	}
 	for i := 0; i < currentHierarchy.currentLevel; i++ {
 		label.pushBack(hierarchyNames.listNames[i], currentHierarchy.idLevels[i])
 	}
+	if isEndCommand {
+		currentHierarchy.currentLevel--
+	}
+	currentHierarchy.setZerosFrom(currentHierarchy.currentLevel + 1)
+
 	if _, ok := hierarchyNames.beginNames[name]; ok {
-		if name == COMMAND_BEGIN_RENDER_PASS {
+		if name == VK_CMD_BEGIN_RENDER_PASS {
 			currentHierarchy.idLevels[currentHierarchy.currentLevel]++
 			currentHierarchy.currentLevel++
 		}
 	}
-	currentHierarchy.setZerosFrom(currentHierarchy.currentLevel)
 	return label
 }
 
@@ -201,7 +207,7 @@ func createGraphFromDependencyGraph(dependencyGraph dependencygraph2.DependencyG
 					currentHierarchy := subCommandNameToHierarchy[subCommandName]
 					subCommandName += fmt.Sprintf("/_%d", commandNode.Index[len(commandNode.Index)-1])
 
-					nameLastLevel := EMPTY_NAME
+					nameLastLevel := EMPTY
 					dependencyNodeAccesses := dependencyGraph.GetNodeAccesses(dependencygraph2.NodeID(i))
 					if len(dependencyNodeAccesses.InitCmdNodes) > 0 {
 						nameLastLevel = graph.idNodeToNode[int(dependencyNodeAccesses.InitCmdNodes[0])].name
@@ -233,8 +239,8 @@ func createGraphFromDependencyGraph(dependencyGraph dependencygraph2.DependencyG
 			if sinkNode, ok := graph.idNodeToNode[idSink]; ok {
 				graph.addEdgeByNodes(sourceNode, sinkNode)
 
-				if sourceNode.name == COMMAND_BEGIN_DEBUG_MARKER || sourceNode.name == COMMAND_END_DEBUG_MARKER {
-					if sinkNode.name == COMMAND_QUEUE_SUBMIT {
+				if sourceNode.name == VK_CMD_DEBUG_MARKER_BEGIN || sourceNode.name == VK_CMD_DEBUG_MARKER_END {
+					if sinkNode.name == VK_QUEUE_SUBMIT {
 						graph.addEdgeByNodes(sinkNode, sourceNode)
 					}
 				}

@@ -38,7 +38,7 @@ cc_proto_library(
 
 go_proto_library(
     name = "dependencygraph2_pb_go_proto",
-    importpath = "github.com/google/gapid/gapis/dependencygraph2/dependencygraph2_pb",
+    importpath = "github.com/google/gapid/gapis/resolve/dependencygraph2/dependencygraph2_pb",
     proto = ":dependencygraph2_pb_proto",
     visibility = ["//visibility:public"],
     deps = ["//gapis/memory/memory_pb:go_default_library"],

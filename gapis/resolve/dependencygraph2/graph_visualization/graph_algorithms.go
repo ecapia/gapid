@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	QUEUE_PRESENT      = "vkQueuePresentKHR"
-	SUPER_COMMAND      = "SUPER"
-	UNUSED_COMMAND     = "UNUSED"
+	VK_QUEUE_PRESENT   = "vkQueuePresentKHR"
+	SUPER              = "SUPER"
+	UNUSED             = "UNUSED"
 	LIMIT_BY_HIERARCHY = 5
 )
 
@@ -113,7 +113,7 @@ func makeChunks(nodes *[]*Node) {
 				pos := currentChunk.idToPosition[id]
 				newIds := currentChunk.positionToLabelIds[pos]
 				for _, newId := range newIds {
-					newLabel.pushBack(SUPER_COMMAND+name, newId)
+					newLabel.pushBack(SUPER+name, newId)
 				}
 			}
 			newLabel.pushBack(name, id)
@@ -139,7 +139,7 @@ func (g *Graph) makeChunksByFrame() {
 	visited := make([]bool, g.maxIdNode)
 	numFrame := 1
 	for _, currNode := range g.nodes {
-		if currNode.name == QUEUE_PRESENT && visited[currNode.id] == false && currNode.isReal {
+		if currNode.name == VK_QUEUE_PRESENT && visited[currNode.id] == false && currNode.isReal {
 			nodesVisited := []*Node{}
 			fmt.Printf("Starting Frame%d\n", numFrame)
 			g.dfs(currNode, &visited, &nodesVisited)
@@ -155,7 +155,7 @@ func (g *Graph) makeChunksByFrame() {
 	}
 	for _, currNode := range g.nodes {
 		if visited[currNode.id] == false {
-			currNode.label.pushFront(UNUSED_COMMAND, 0)
+			currNode.label.pushFront(UNUSED, 0)
 			currNode.color = ""
 		}
 	}

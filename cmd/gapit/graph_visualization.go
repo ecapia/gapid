@@ -15,12 +15,12 @@
 package main
 
 import (
-	"github.com/google/gapid/core/app"
-	"github.com/google/gapid/core/log"
-	"path/filepath"
-	"io/ioutil"
 	"context"
 	"flag"
+	"github.com/google/gapid/core/app"
+	"github.com/google/gapid/core/log"
+	"io/ioutil"
+	"path/filepath"
 )
 
 type graph_visualizationVerb struct{ GraphVisualizationFlags }
@@ -34,9 +34,9 @@ func init() {
 	})
 }
 func getLastLevelNameFromCapturePath(capturePath string) string {
-	for i := len(capturePath) -1; i >= 0 ; i-- {
+	for i := len(capturePath) - 1; i >= 0; i-- {
 		if capturePath[i] == '/' {
-			return capturePath[i + 1:]
+			return capturePath[i+1:]
 		}
 	}
 	return capturePath
@@ -64,7 +64,7 @@ func (verb *graph_visualizationVerb) Run(ctx context.Context, flags flag.FlagSet
 		return log.Errf(ctx, err, "LoadCapture(%v)", capturePath)
 	}
 	format := verb.Format
-	graphVisualizationFile, err := client.GetGraphVisualizationFile(ctx, capture,format)
+	graphVisualizationFile, err := client.GetGraphVisualizationFile(ctx, capture, format)
 	if err != nil {
 		return log.Errf(ctx, err, "ExportCapture(%v)", capture)
 	}
@@ -73,7 +73,7 @@ func (verb *graph_visualizationVerb) Run(ctx context.Context, flags flag.FlagSet
 	if graphVisualizationName == "" {
 		graphVisualizationName = getLastLevelNameFromCapturePath(capturePath)
 	}
-	graphVisualizationName +="." + format
+	graphVisualizationName += "." + format
 
 	if err := ioutil.WriteFile(graphVisualizationName, []byte(graphVisualizationFile), 0666); err != nil {
 		return log.Errf(ctx, err, "Writing file: %v", graphVisualizationName)
